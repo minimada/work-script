@@ -57,7 +57,7 @@ get_test_parameters(){
 _res=`echo $1 | grep -e "$LOCAL_TEST_GROUP"`
 if [ -n "$_res" ];then
     LOCAL_ROBOT="y"
-    if [ "$1" == "dmtf_tools" ];then
+    if [ "$1" == "redfish/dmtf_tools" ];then
         EXTRA_PARAMS="-e \"Run_Redfish_Service_Validator_With_Additional_Roles\""
         EXTRA_PARAMS+=" -v min_number_sensors:1"
     fi
@@ -156,7 +156,7 @@ fi
 echo "=== starting test $(date +'%x %X') ==="
 perform_remote_test "${TEST_PACKAGE}" "${TEST_CASE}"
 perform_remote_test redfish/account_service
-perform_remote_test redfish/managers
+perform_remote_test redfish/dmtf_tools
 
 
 
