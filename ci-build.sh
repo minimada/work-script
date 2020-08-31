@@ -101,6 +101,9 @@ echo "build project ${1}"
 
 cd ${WORKSPACE}/openbmc
 
+# Clean up old build configurations
+rm -rf build/conf/*
+
 export BDIR="build"
 # Source our build env
 TEMPLATECONF=${1}/conf source oe-init-build-env
@@ -142,4 +145,4 @@ cd ${WORKSPACE}/
 rm -rf ./openbmc/$META_REPO/*
 cd openbmc
 git reset --hard origin/runbmc
-rm -rf build/conf/*
+
