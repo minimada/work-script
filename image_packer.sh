@@ -4,40 +4,28 @@
 # 
 
 Usage(){
-	echo `basename $0` "[-vpjmd data]"
+	echo `basename $0` "[-vmd data]"
 	echo "  -v: set backup image name (version)"
-	echo "  -p: set project name"
-	echo "  -j: set project name in Jenkins"
 	echo "  -m: set machine name"
 	echo "  -d: set backup folder name"
 	exit 1
 }
 
-export DL_CACHE_HOME=/home/cs20
 export BACKUP_PATH=${DL_CACHE_HOME}/images_backup
-# Jenkins project
-JPROJECT=Nuvoton-OpenBMC
-# the build project setting in build project Configuration Matrix
-PROJECT=olympus-nuvoton
+
 # the machine name define in source code conf folder
 MACHINE="" # default set to project
 # /var/jenkins_home/workspace/Nuvoton-OpenBMC/target/olympus-nuvoton/deploy/images/olympus-nuvoton
-IMAGE_SOURCE=${WORKSPACE}/${JPROJECT}/target/${PROJECT}/deploy/images/${MACHINE}
+IMAGE_SOURCE=${WORKSPACE}/deploy/images/${MACHINE}
 # full image, signle image for each partition, vmlinux
 COLEECTION="vmlinux* *-image-*static.mtd.*"
 VERSION="Default version"
 
 parse_arg(){
-	while getopts ":v:p:m:d:j:" argv;do
+	while getopts ":v:m:d:" argv;do
 		case "$argv" in
-			p)
-				PROJECT=${OPTARG}
-				;;
 			d)
 				BACKUP_PATH=${DL_CACHE_HOME}/${OPTARG}
-				;;
-			j)
-				JPROJECT=${OPTARG}
 				;;
 			m)
 				MACHINE=${OPTARG}
@@ -57,15 +45,11 @@ parse_arg(){
 	else
 		VERSION=$VER
 	fi
-	if [ -z "${PROJECT}" ];then
-		echo "Project cannot empty"
-		Uasge
-	fi
 
 	# for debug use, test script in non-jenkins environment
 	user=`id -un`
 	if [ "${user}" != "jenkins" ];then
-		WORKSPACE="/var/jenkins_home/workspace"
+		WORKSPACE="/var/jenkins_home/workspace/BUV-build/target/buv-runbmc"
 		DL_CACHE_HOME="/home2/cs20"
 		BACKUP_PATH=${DL_CACHE_HOME}/$(basename ${BACKUP_PATH})
 	fi
@@ -80,10 +64,16 @@ parse_arg(){
 		exit 1
 	fi
 	if [ -z "$MACHINE" ];then
-		MACHINE=${PROJECT}
+		echo "Must set machine name"
+		Usage
 	fi
 
-	IMAGE_SOURCE=${WORKSPACE}/${JPROJECT}/target/${PROJECT}/deploy/images/${MACHINE}
+	IMAGE_SOURCE=${WORKSPACE}/deploy/images/${MACHINE}
+
+	if [ ! -d "$IMAGE_SOURCE" ];then
+		echo "Cannot find image source folder: ${IMAGE_SOURCE}"
+		exit 1
+	fi
 }
 
 get_backup_target(){
