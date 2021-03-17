@@ -20,14 +20,10 @@ IMAGE_MAX=30
 LOG_PATH=/home/cs20/test_logs
 IMAGE_PATH=/home/cs20/images_backup
 
-# functions
-# need direct set globle var or use local 
-get_image_count(){
-	find $1 -maxdepth 1 -type f | wc -l
-}
-
-get_log_count(){
-	find $1 -maxdepth 1 -mindepth 1 -type d | wc -l
+# Functions
+# $1 : backup folder for count items
+get_backup_count(){
+	find $1 -maxdepth 1 -mindepth 1 | wc -l
 }
 
 # $1 : log or image path
@@ -51,10 +47,8 @@ rotate(){
 		echo "Filter: $4"
 	fi	
 
-	if [ "$3" == "LOG" ];then
-		local count=$(get_log_count ${path})
-	elif [ "$3" == "IMAGE" ];then
-		local count=$(get_image_count ${path})
+	if [ "$3" == "LOG" -o "$3" == "IMAGE" ];then
+		local count=$(get_backup_count ${path})
 	else
 		echo "invalid type"
 		return
@@ -66,14 +60,15 @@ rotate(){
 
 	if [ "$count" -gt "$max" ];then
 		diff=$(expr $count - $max)
-		rm_set=$(ls $path | tr "\[ \]*" "\n" | head -n $diff)
+		# get oldest item, and replace space* to new line
+		rm_set=$(ls -tr $path | tr "\[ \]*" "\n" | head -n $diff)
 		if [ "$verbose" == "y" ];then
 			echo "Trying to remove..."
 			echo $rm_set
 		fi
 		if [ "$not_remove" != "n" ];then
 			cd $path
-			rm -rv $rm_set
+			rm -rvf $rm_set
 		fi
 	fi
 
@@ -115,9 +110,13 @@ parse_arg(){
 		esac
 	done
 	shift $((OPTIND-1))
-	IMAGE_FILTERS=`echo $IMAGE_FILTERS | tr ":" " "`
+	# replace : to space
+	IMAGE_FILTERS=${IMAGE_FILTERS/":"/" "}
 	if [ "$debug" == "y" ];then
 		echo "FILTERS: $IMAGE_FILTERS"
+	fi
+	if [ -z "$IMAGE_FILTERS" ];then
+		echo "Warning: no backup project selected."
 	fi
 }
 
