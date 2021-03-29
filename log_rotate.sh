@@ -130,4 +130,5 @@ do
 	rotate $IMAGE_PATH $IMAGE_MAX "IMAGE" $filter
 done
 
+echo "image/log rotate process finished $(date)"
 exit 0
