@@ -18,9 +18,11 @@ DEBUG=${DEBUG:="n"}
 # fixed parameters
 # oe-buildenv-internal will get BDIR from $2, we need to set it or eat $@
 BDIR="build"
-BUV_CONF="meta-evb/meta-evb-nuvoton/meta-buv-runbmc/conf"
-OLYMPUS_CONF="meta-quanta/meta-olympus-nuvoton/conf"
-EVB_CONF="meta-evb/meta-evb-nuvoton/meta-evb-npcm750/conf"
+BUV_CONF="buv-runbmc"
+OLYMPUS_CONF="olympus-nuvoton"
+EVB_POLEG_CONF="evb-npcm750"
+EVB_ARBEL_CONF="evb-npcm845"
+
 
 uboot_build()
 {
@@ -46,7 +48,12 @@ if [ -n "$_runbmc" ];then
     DEFAULT_CONF=${OLYMPUS_CONF}
     return 0
 fi
-DEFAULT_CONF=${EVB_CONF}
+_arbel=`echo $(pwd)|grep -i arbel`
+if [ -n "$_arbel" ];then
+    DEFAULT_CONF=${EVB_ARBEL_CONF}
+    return 0
+fi
+DEFAULT_CONF=${EVB_POLEG_CONF}
 }
 
 # show parsed result
@@ -70,12 +77,11 @@ CMD="bitbake ${TARGET}"
 
 dump_var
 echo $(date +'%x %X')
-export TEMPLATECONF="${DEFAULT_CONF}"
-if [ ! -f openbmc-env ];then
+if [ ! -f setup ];then
     echo "Cannot find openbmc-env, not correct bitbake folder"
     exit 1
 fi
-source openbmc-env
+source setup ${DEFAULT_CONF}
 if [ "$DEBUG" == "y" ];then
     echo $(pwd)
 else
