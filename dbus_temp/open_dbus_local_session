@@ -1,0 +1,52 @@
+#!/bin/bash
+
+#
+# 
+
+Usage(){
+    echo source `basename $0` "[config]"
+    echo "start a dbus daemon and set address to environment"
+#    exit 1
+}
+
+function remove_old()
+{
+if [ -f "$1" ]; then
+  rm -vf "$1"
+fi
+}
+
+SCRIPT_PATH=$(dirname `realpath $0`)
+
+def_config=/home/brian/workspace/docker/unit_test/dbus_temp/system-local.conf
+config=""
+
+# find config by following sequence:
+# 1. script parameter 2. same folder with script 3. hard code default config path
+if [ -f "$1" ];then
+  config="$1"
+fi
+
+if [ -z "$config" ]; then
+  if [ -f "${SCRIPT_PATH}/system-local.conf" ]; then
+    config="${SCRIPT_PATH}/system-local.conf"
+  elif [ -f "$def_config" ]; then
+    config="$def_config"
+  else
+    echo "No valid dbus config found! Open session failed."
+  fi
+fi
+
+if [ -n "$config" ]; then
+SCRIPT_PATH=$(dirname `realpath $config`)
+remove_old "${SCRIPT_PATH}/pid"
+remove_old "${SCRIPT_PATH}/system_bus_socket"
+
+rs=$(dbus-daemon --config-file=${config} --print-address)
+addr=$(echo $rs | sed 's/,.*//')
+
+# export DBUS environment
+export DBUS_SESSION_BUS_ADDRESS=$addr
+export DBUS_STARTER_BUS_TYPE=session
+echo "OK"
+fi

@@ -1,0 +1,48 @@
+#!/bin/bash
+
+#
+# 
+
+Usage(){
+    echo `basename $0 [dbus pid file path]`
+    echo "stop started dbus daemon for local session"
+    echo "In fact..., user can kill the daemon directly"
+    exit 1
+}
+
+SCRIPT_PATH=$(dirname `realpath $0`)
+
+def_pid=/home/brian/workspace/docker/unit_test/dbus_temp/pid
+pid=""
+
+# find config by following sequence:
+# 1. script parameter 2. same folder with script 3. hard code default config path
+if [ -f "$1" ];then
+  pid="$1"
+fi
+
+if [ -z "$pid" ]; then
+  if [ -f "${SCRIPT_PATH}/pid" ]; then
+    pid="${SCRIPT_PATH}/pid"
+  elif [ -f "$def_pid" ]; then
+    pid="$def_pid"
+  else
+    echo "No dbus pid file found! No need close dbus session."
+    exit 0
+  fi
+fi
+
+# kill daemon
+SCRIPT_PATH=$(dirname `realpath $pid`)
+echo "kill $(cat ${pid})"
+kill $(cat ${pid})
+
+# then remove files
+if [ -f "${SCRIPT_PATH}/pid" ];then
+  rm -fv "${SCRIPT_PATH}/pid"
+fi
+
+if [ -e "${SCRIPT_PATH}/system_bus_socket" ];then
+  rm -fv "${SCRIPT_PATH}/system_bus_socket"
+fi
+echo Done
