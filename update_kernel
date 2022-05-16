@@ -1,0 +1,64 @@
+#!/bin/bash
+
+Usage(){
+  echo `basename $0` "[kernel image]"
+  exit 1
+}
+
+# Copy from obmc-flash-bmc
+# The eMMC partition labels for the kernel and rootfs are boot-a/b and rofs-a/b.
+# Return the label (a or b) for the running partition.
+mmc_get_primary_label() {
+  # Get root device /dev/mmcblkpX
+  rootmatch=" on / "
+  root="$(mount | grep "${rootmatch}")"
+  root="${root%${rootmatch}*}"
+
+  # Find the device label
+  if [[ $(readlink -f /dev/disk/by-partlabel/rofs-a) == "${root}" ]]; then
+    echo "a"
+  elif [[ $(readlink -f /dev/disk/by-partlabel/rofs-b) == "${root}" ]]; then
+    echo "b"
+  else
+    echo ""
+  fi
+}
+
+mmc_get_secondary_label() {
+  root="$(mmc_get_primary_label)"
+  if [[ "${root}" == "a" ]]; then
+    echo "b"
+  elif [[ "${root}" == "b" ]]; then
+    echo "a"
+  else
+    echo ""
+  fi
+}
+
+image="/tmp/image-kernel"
+mount_dir="/tmp/kernel"
+
+if [ -n "$1" ]; then
+    image="$1"
+fi
+if [ ! -f "$image" ]; then
+    echo "image is not valid: $image"
+    Usage
+fi
+# update backup image kernel for crash kernel
+if [ "$2" == "b" ];then
+    label="$(mmc_get_secondary_label)"
+    echo "Update backup kernel..."
+else
+    label="$(mmc_get_primary_label)"
+    echo "Update kernel image..."
+fi
+
+mkdir -p "$mount_dir"
+part="$(readlink -f /dev/disk/by-partlabel/boot-${label})"
+
+echo "image: ${image}, mmc parition: ${part}"
+mount -t ext4 "$part" "$mount_dir"
+cp -v "$image" "${mount_dir}/fitImage"
+umount "$mount_dir"
+echo "update finished, please reboot to take effect"
