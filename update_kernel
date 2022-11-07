@@ -2,6 +2,9 @@
 
 Usage(){
   echo `basename $0` "[kernel image]"
+  echo "ex:"
+  echo "   "`basename $0` "/tmp/image-kernel b"
+  echo "   b: backup mmc partition"
   exit 1
 }
 
@@ -20,7 +23,8 @@ mmc_get_primary_label() {
   elif [[ $(readlink -f /dev/disk/by-partlabel/rofs-b) == "${root}" ]]; then
     echo "b"
   else
-    echo ""
+    # return "a" for support update eMMC kernel image under SPI image
+    echo "a"
   fi
 }
 
@@ -37,6 +41,10 @@ mmc_get_secondary_label() {
 
 image="/tmp/image-kernel"
 mount_dir="/tmp/kernel"
+
+if [ "$1" == "-h" -o "$1" == "--help" ]; then
+    Usage
+fi
 
 if [ -n "$1" ]; then
     image="$1"
