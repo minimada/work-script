@@ -86,7 +86,6 @@ CMD="bitbake ${TARGET}"
 # specail case for bblayer change, keep local.conf and re-generate conf folder
 if [ -n "${CCONF}" ];then
     CLEAN_CONF="y"
-    DEBUG="y"
     temp_conf=$(mktemp -u)
     cp "build/${DEFAULT_CONF}/conf/local.conf" "${temp_conf}"
     rm -r "build/${DEFAULT_CONF}/conf/"
@@ -100,10 +99,11 @@ if [ ! -f setup ];then
 fi
 source setup ${DEFAULT_CONF}
 if [ "${CLEAN_CONF}" == "y" ]; then
-    cp "${temp_conf}" "build/${DEFAULT_CONF}/conf/local.conf"
+    # we are now at build folder
+    cp -v "${temp_conf}" "conf/local.conf"
     rm "${temp_conf}"
-    $CMD
-elif [ "${DEBUG}" == "y" ];then
+fi
+if [ "${DEBUG}" == "y" ];then
     pwd
 else
     $CMD
