@@ -11,13 +11,14 @@
 #       CONF=buv-runbmc CCONF=y qbuild # keep local.conf and re-generate other conf
 #                                        this is used for bblayer change due to
 #                                        openbmc upgrade
+#       CCONF=buv-runbmc qbuild # same funtion as above option, for lazy man
 #
 # ***********************************************
 
 # parameters
 UBOOT_BUILD="n"
 TARGET="obmc-phosphor-image"
-DEFAULT_CONF=${CONF}
+DEFAULT_CONF=${CONF:=""}
 DEBUG=${DEBUG:="n"}
 
 # fixed parameters
@@ -43,6 +44,14 @@ get_conf()
 if [ -n "${DEFAULT_CONF}" ];then
     return
 fi
+# lazy user want to type lesser key, CCONF=y CONF=xxx=> CCONF=xxx
+if [ -n "${CCONF}" ];then
+    if [ "${CCONF}" != "y" ]; then
+        DEFAULT_CONF=${CCONF}
+        return
+    fi
+fi
+
 _buv=$(pwd | grep -i buv)
 if [ -n "$_buv" ];then
     DEFAULT_CONF=${BUV_CONF}
