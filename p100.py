@@ -113,9 +113,13 @@ async def main():
             if len(devices) > 0:
                 for x in devices:
                     ips.append(x.ip)
+                    print(f"find device ip: {x.ip}")
         # no ip set, no plug found, or too many plugs found
         if len(ips) != 1:
-            print("Cannot get IP address")
+            if len(ips) < 1:
+                print("Cannot get IP address")
+            else:
+                print("Please use -i to set which device to control\n")
             parser.print_help()
             exit(1)
         else:
