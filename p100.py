@@ -5,11 +5,19 @@ import os
 
 from plugp100.api.tapo_client import TapoClient
 from plugp100.common.credentials import AuthCredential
-#from plugp100.discovery.arp_lookup import ArpLookup
 from plugp100.discovery.tapo_discovery import TapoDiscovery
+from plugp100.discovery.discovered_device import DiscoveredDevice
 from plugp100.api.plug_device import PlugDevice
 from plugp100.responses.device_state import PlugDeviceState
 from plugp100.responses.tapo_exception import TapoException, TapoError
+
+# use pre-defined device map, we can get mac information from
+# discovered devices, but once we need get more about nickname or status,
+# we have to authenticated. So simplly use pre-define map.
+try:
+    from  device_map import device_map
+except ImportError:
+    device_map = None
 
 logger = logging.getLogger(__name__)
 parser = argparse.ArgumentParser(formatter_class=argparse.RawTextHelpFormatter)
@@ -27,21 +35,12 @@ python3 p100.py -d
 python3 p100.py -i 192.168.0.106 -o on
 '''
 
-async def discover():
-    print("Scanning network...")
-    discovered_devices = list(TapoDiscovery.scan(5))
+async def discover(timeout: int = 5) -> list[DiscoveredDevice]:
+    print(f"Scanning network...{timeout}s")
+    discovered_devices = list(TapoDiscovery.scan(timeout))
     for x in discovered_devices:
         logger.debug(x)
 
-    # if we can get IP from device, do we need this?
-    # if len(discovered_devices) > 0:
-    #     print("Trying to lookup with mac address")
-    #     lookup = await ArpLookup.lookup(
-    #         discovered_devices[0].mac.replace("-", ":"),
-    #         "192.168.0.0/24",
-    #         allow_promiscuous=False,
-    #     )
-    #     print(lookup)
     return discovered_devices
 
 example_text = '''example:
@@ -67,6 +66,8 @@ def parse_args():
         default="warning",
         help=("Provide logging level. " "Example --log debug', default='warning'"),
     )
+    parser.add_argument("-s", "--device", default="",
+                        help="Try to use device name connect to device")
     parser.epilog = example_text
     parser.description = "Turn on/off or show smart plug state"
     options = parser.parse_args()
@@ -100,30 +101,61 @@ def show_state(state: PlugDeviceState):
     info = state.info
     print(f"{info.nickname}: {state.device_on}")
 
+def print_discovered(dev: DiscoveredDevice):
+    name = "unknow"
+    if device_map and dev.mac in device_map:
+        name =  device_map[dev.mac]
+    else:
+        name = dev.mac
+    print(f"IP: {dev.ip}, device: {name}")
+
+# Note: discovered device id does not equal authed device id, use mac
+async def find_device_from_discoverd(name: str) -> list[DiscoveredDevice]:
+    dev_mac = ""
+    if device_map:
+        for mac in device_map:
+            if device_map[mac] == name:
+                dev_mac = mac
+        if len(dev_mac) == 0:
+            print(f"Cannot find device: {name}")
+            exit(1)
+    else:
+        print("Cannot get device map")
+        exit(1)
+    logger.debug(f"found mac {dev_mac} with name {name}")
+    devices = await discover()
+    for dev in devices:
+        if dev.mac == dev_mac:
+            return [dev]
+    return []
+
+
 async def main():
     options = parse_args()
     username, password = getUserPass()
+    devices = []
 
     if len(options.ip) == 0:
         # try to perform discovery
-        ips = []
-        if options.discovery:
+        if options.discovery :
             print("No IP address, try dicovery")
             devices = await discover()
-            if len(devices) > 0:
-                for x in devices:
-                    ips.append(x.ip)
-                    print(f"find device ip: {x.ip}")
+        elif len(options.device) > 0:
+            devices = await find_device_from_discoverd(options.device)
+
         # no ip set, no plug found, or too many plugs found
-        if len(ips) != 1:
-            if len(ips) < 1:
-                print("Cannot get IP address")
-            else:
-                print("Please use -i to set which device to control\n")
+        if len(devices) < 1:
+            print("Cannot get IP address")
             parser.print_help()
             exit(1)
+        elif len(devices) > 1:
+            for x in devices:
+                print_discovered(x)
+            print("\nPlease use -i to set which device to control\n")
+            #parser.print_help()
+            exit(1)
         else:
-            ipaddr = ips.pop()
+            ipaddr = devices.pop().ip
             print(f"dicovery finished, use IP: {ipaddr}")
     else:
         ipaddr = options.ip
@@ -138,7 +170,11 @@ async def main():
             await plug.off()
         # response come from TapoResponse.try_from_json, class Failure or Success
         res = await plug.get_state()
-        show_state(res.value)
+        if res.biased:
+            show_state(res.value)
+        else:
+            # failure case
+            print(res.value)
     except TapoException as e:
         if e.error_code == TapoError.INVALID_CREDENTIAL.value:
             print("Please check username and password")
