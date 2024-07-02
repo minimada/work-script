@@ -106,25 +106,28 @@ if [ ! -f setup ];then
     echo "Cannot find openbmc-env, not correct bitbake folder"
     exit 1
 fi
+set -e
 source setup ${DEFAULT_CONF}
 if [ "${CLEAN_CONF}" == "y" ]; then
     # we are now at build folder
     cp -v "${temp_conf}" "conf/local.conf"
     rm "${temp_conf}"
 fi
+set +e
 if [ "${DEBUG}" == "y" ];then
     pwd
 else
     $CMD
 fi
 rs=$?
-# uboot auto build
-uboot_build
-if [ "${UBOOT_BUILD}" == "y" ] && [ "${rs}" == "0" ];then
-    echo -e "\nStart U-Boot automatic image build...\n"
-    if [ "${DEBUG}" != "y" ];then
-        bitbake obmc-phosphor-image -C prepare_bootloaders
-    fi
-fi
+# uboot auto build, we don't need this anymore after once IGPS
+#uboot_build
+#if [ "${UBOOT_BUILD}" == "y" ] && [ "${rs}" == "0" ];then
+#    echo -e "\nStart U-Boot automatic image build...\n"
+#    if [ "${DEBUG}" != "y" ];then
+#        bitbake obmc-phosphor-image -C prepare_bootloaders
+#    fi
+#fi
 
 date +'%x %X'
+exit "$rs"
