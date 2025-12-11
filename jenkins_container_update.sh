@@ -3,11 +3,12 @@
 # Jenkins Container Update Script
 # This script updates Jenkins running in a Docker container
 # Usage:
-#   ./jenkins_container_update.sh <container_name> <jenkins_version> [auto_restart]
+#   ./jenkins_container_update.sh <container_name> <jenkins_version> [auto_restart] [force]
 # Example:
 #   ./jenkins_container_update.sh jenkins-server0325 2.414.1
 #   ./jenkins_container_update.sh jenkins-server0325 2.414.1 y
 #   ./jenkins_container_update.sh jenkins-server0325 2.414.1 n
+#   ./jenkins_container_update.sh jenkins-server0325 2.414.1 y force
 
 set -e
 
@@ -30,20 +31,53 @@ print_error() {
     echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
+# Function to compare versions (returns 0 if v1 < v2, 1 if v1 == v2, 2 if v1 > v2)
+compare_versions() {
+    local v1=$1
+    local v2=$2
+
+    if [ "$v1" = "$v2" ]; then
+        return 1
+    fi
+
+    # Use sort -V (version sort) to compare
+    local sorted
+    sorted=$(printf '%s\n%s\n' "$v1" "$v2" | sort -V | head -n1)
+
+    if [ "$sorted" = "$v1" ]; then
+        return 0  # v1 < v2
+    else
+        return 2  # v1 > v2
+    fi
+}
+
 # Check if correct number of arguments provided
-if [ $# -lt 2 ] || [ $# -gt 3 ]; then
+if [ $# -lt 2 ] || [ $# -gt 4 ]; then
     print_error "Invalid number of arguments."
-    echo "Usage: $0 <container_name> <jenkins_version> [auto_restart]"
+    echo "Usage: $0 <container_name> <jenkins_version> [auto_restart] [force]"
     echo "  auto_restart: 'y' or 'n' (optional, default: prompt user)"
+    echo "  force: 'force' to skip version check (optional)"
     echo "Example: $0 jenkins-server0325 2.414.1"
     echo "         $0 jenkins-server0325 2.414.1 y"
     echo "         $0 jenkins-server0325 2.414.1 n"
+    echo "         $0 jenkins-server0325 2.414.1 y force"
     exit 1
 fi
 
 CONTAINER_NAME="$1"
 NEW_VERSION="$2"
 RESTART_CONTAINER_ARG="${3:-}"
+FORCE_UPDATE=false
+
+# Check for force parameter in 3rd or 4th position
+if [[ "${3:-}" == "force" ]] || [[ "${4:-}" == "force" ]]; then
+    FORCE_UPDATE=true
+    print_info "Force update mode enabled."
+    # If force is in position 3, shift restart arg
+    if [[ "${3:-}" == "force" ]]; then
+        RESTART_CONTAINER_ARG=""
+    fi
+fi
 
 # Validate version format
 VERSION_REGEX='^[0-9]+\.[0-9]+\.[0-9]+$'
@@ -97,14 +131,55 @@ if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
     exit 1
 fi
 
+# Get current Jenkins version
+print_info "Checking current Jenkins version..."
+CURRENT_VERSION=$(docker exec "$CONTAINER_NAME" \
+    java -jar /usr/share/jenkins/jenkins.war --version 2>/dev/null || echo "unknown")
+
+if [ "$CURRENT_VERSION" = "unknown" ]; then
+    print_warning "Could not determine current Jenkins version."
+    if [ "$FORCE_UPDATE" = false ]; then
+        print_error "Cannot verify version. Use 'force' parameter to proceed anyway."
+        exit 1
+    fi
+else
+    print_info "Current version: $CURRENT_VERSION"
+
+    # Compare versions if not force update
+    if [ "$FORCE_UPDATE" = false ]; then
+        compare_versions "$CURRENT_VERSION" "$NEW_VERSION"
+        COMPARE_RESULT=$?
+
+        if [ $COMPARE_RESULT -eq 1 ]; then
+            print_warning "Current version ($CURRENT_VERSION) is the same as target version ($NEW_VERSION)."
+            print_error "Update aborted. Use 'force' parameter to proceed anyway."
+            exit 0
+        elif [ $COMPARE_RESULT -eq 2 ]; then
+            print_warning "Current version ($CURRENT_VERSION) is newer than target version ($NEW_VERSION)."
+            print_error "Downgrade not recommended. Use 'force' parameter to proceed anyway."
+            exit 0
+        else
+            print_info "Version check passed: $CURRENT_VERSION -> $NEW_VERSION"
+        fi
+    fi
+fi
+
 print_info "Starting Jenkins update process for container: $CONTAINER_NAME"
 print_info "Target version: $NEW_VERSION"
 
 # Check if jenkins_update.sh exists
 UPDATE_SCRIPT="jenkins_update.sh"
 if [ ! -f "$UPDATE_SCRIPT" ]; then
-    print_error "Update script '$UPDATE_SCRIPT' not found in current directory."
-    exit 1
+    # Try to change directory to script's location
+    SCRIPT_DIR="$(dirname "$0")"
+    cd "$SCRIPT_DIR" || {
+        print_error "Failed to change directory to script location."
+        exit 1
+    }
+    if [ ! -f "$UPDATE_SCRIPT" ]; then
+        print_error "Update script '$UPDATE_SCRIPT' not found in current directory."
+        exit 1
+    fi
 fi
 
 # Copy update script to container
@@ -163,15 +238,33 @@ if [ "$UPDATE_SUCCESS" = true ]; then
             if [ "$JENKINS_READY" = true ]; then
                 print_info "✓ Jenkins is fully up and running (waited ${ELAPSED_TIME}s)"
 
-                # Verify new version
-                print_info "Verifying Jenkins version..."
+                # Verify new version from docker logs
+                print_info "Verifying Jenkins version from logs..."
+                sleep 2  # Give logs a moment to flush
+
+                LOG_VERSION=$(docker logs --since "$RESTART_TIME" "$CONTAINER_NAME" 2>&1 | \
+                    grep -oP 'Starting.*[Vv]ersion\s+\K[0-9]+\.[0-9]+\.[0-9]+' | tail -1)
+
+                if [ -n "$LOG_VERSION" ]; then
+                    print_info "Version from logs: $LOG_VERSION"
+                    if [ "$LOG_VERSION" = "$NEW_VERSION" ]; then
+                        print_info "✓ Log verification: Jenkins successfully updated to version $LOG_VERSION"
+                    else
+                        print_warning "Log verification: Version is $LOG_VERSION (expected $NEW_VERSION)"
+                    fi
+                else
+                    print_warning "Could not find version string in logs."
+                fi
+
+                # Also verify using jenkins.war
+                print_info "Verifying Jenkins version from WAR file..."
                 ACTUAL_VERSION=$(docker exec "$CONTAINER_NAME" \
                     java -jar /usr/share/jenkins/jenkins.war --version 2>/dev/null || echo "unknown")
 
                 if [ "$ACTUAL_VERSION" = "$NEW_VERSION" ]; then
-                    print_info "✓ Jenkins successfully updated to version $ACTUAL_VERSION"
+                    print_info "✓ WAR verification: Jenkins successfully updated to version $ACTUAL_VERSION"
                 else
-                    print_warning "Jenkins version is $ACTUAL_VERSION (expected $NEW_VERSION)"
+                    print_warning "WAR verification: Jenkins version is $ACTUAL_VERSION (expected $NEW_VERSION)"
                 fi
             else
                 print_warning "Jenkins did not become ready within ${MAX_WAIT_TIME}s"
